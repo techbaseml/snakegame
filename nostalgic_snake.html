@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Nostalgic Snake</title>
+<style>
+:root{--lcd:#b8c58a;--dark:#26351f;--mid:#53634a;--light:#dbe4aa}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;min-height:100vh;background:#111;display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;color:var(--dark);overflow:hidden}
+.phone{width:min(430px,100vw);min-height:100vh;background:#d7d0bd;display:flex;flex-direction:column;align-items:center;padding:28px 18px 22px;box-shadow:0 0 40px #000}
+.brand{font-weight:900;letter-spacing:5px;font-size:20px;margin:4px 0 5px;color:#38352d}
+.subtitle{font-size:10px;letter-spacing:2px;margin-bottom:16px;color:#6b6659}
+.panel{width:100%;max-width:370px;background:#89957b;border:7px solid #4d5148;border-radius:16px;padding:10px;box-shadow:inset 0 0 0 3px #69725f,0 7px 0 #aaa394}
+.screen{background:var(--lcd);border:4px solid #313a2c;border-radius:5px;padding:7px}
+canvas{display:block;width:100%;aspect-ratio:1;background:var(--lcd);image-rendering:pixelated}
+.hud{display:flex;justify-content:space-between;font-family:monospace;font-weight:bold;font-size:15px;padding:4px 2px 2px}
+.controls{margin-top:26px;display:grid;grid-template-columns:repeat(3,70px);grid-template-rows:repeat(2,62px);gap:9px}
+button{border:0;background:#77776d;color:#eee8d6;font-size:25px;font-weight:bold;border-radius:13px;box-shadow:0 5px 0 #4d4d47;touch-action:manipulation}
+button:active{transform:translateY(4px);box-shadow:0 1px 0 #4d4d47}
+.up{grid-column:2}.left{grid-column:1;grid-row:2}.down{grid-column:2;grid-row:2}.right{grid-column:3;grid-row:2}
+.actions{display:flex;gap:10px;margin-top:20px}
+.action{padding:12px 20px;font-size:13px;letter-spacing:1px;background:#4d5148}
+.hint{font-size:10px;opacity:.65;margin-top:15px;text-align:center}
+.overlay{position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center;padding:25px}
+.card{background:#d7d0bd;border:6px solid #4d5148;border-radius:18px;padding:25px;text-align:center;max-width:310px;box-shadow:0 12px 0 #0006}
+.card h2{margin:0 0 8px;letter-spacing:2px}.card p{margin:8px 0 18px;font-family:monospace}
+.start{padding:13px 25px;background:#53634a}
+@media(min-width:600px){.phone{min-height:auto;border-radius:25px}.overlay{position:fixed}}
+</style>
+</head>
+<body>
+<main class="phone">
+  <div class="brand">NOKIA • CLASSIC</div>
+  <div class="subtitle">NOSTALGIC SNAKE</div>
+  <section class="panel">
+    <div class="screen">
+      <div class="hud"><span>SCORE: <b id="score">0</b></span><span>BEST: <b id="best">0</b></span></div>
+      <canvas id="game" width="360" height="360"></canvas>
+    </div>
+  </section>
+  <div class="controls" aria-label="Game controls">
+    <button class="up" data-dir="up">▲</button>
+    <button class="left" data-dir="left">◀</button>
+    <button class="down" data-dir="down">▼</button>
+    <button class="right" data-dir="right">▶</button>
+  </div>
+  <div class="actions">
+    <button class="action" id="pause">PAUSE</button>
+    <button class="action" id="restart">RESTART</button>
+  </div>
+  <div class="hint">ARROW KEYS / WASD • TAP THE BUTTONS • SPACE = PAUSE</div>
+</main>
+<div class="overlay" id="overlay">
+  <div class="card">
+    <h2 id="title">GAME OVER</h2>
+    <p id="message">SCORE: 0</p>
+    <button class="start" id="again">PLAY AGAIN</button>
+  </div>
+</div>
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const scoreEl=document.getElementById('score'),bestEl=document.getElementById('best');
+const overlay=document.getElementById('overlay'),title=document.getElementById('title'),message=document.getElementById('message');
+const again=document.getElementById('again'),pause=document.getElementById('pause'),restart=document.getElementById('restart');
+const N=18, cell=canvas.width/N;
+let snake,food,dir,nextDir,score,best=Number(localStorage.getItem('nostalgicSnakeBest')||0),running=false,paused=false,timer=null,speed=150;
+bestEl.textContent=best;
+
+function reset(){
+  snake=[{x:9,y:9},{x:8,y:9},{x:7,y:9}];
+  dir={x:1,y:0};nextDir={x:1,y:0};score=0;speed=150;paused=false;running=true;
+  scoreEl.textContent=0;placeFood();overlay.style.display='none';pause.textContent='PAUSE';loop();draw();
+}
+function placeFood(){
+  do{food={x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)}}
+  while(snake.some(s=>s.x===food.x&&s.y===food.y));
+}
+function setDir(name){
+  const d={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}}[name];
+  if(d && !(d.x===-dir.x&&d.y===-dir.y)) nextDir=d;
+}
+function loop(){
+  clearTimeout(timer);
+  if(running&&!paused) timer=setTimeout(step,speed);
+}
+function step(){
+  dir=nextDir;
+  const head={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
+  if(head.x<0||head.x>=N||head.y<0||head.y>=N||snake.some(s=>s.x===head.x&&s.y===head.y)){gameOver();return}
+  snake.unshift(head);
+  if(head.x===food.x&&head.y===food.y){
+    score++;scoreEl.textContent=score;
+    if(score>best){best=score;bestEl.textContent=best;localStorage.setItem('nostalgicSnakeBest',best)}
+    speed=Math.max(65,150-score*3);placeFood();
+  }else snake.pop();
+  draw();loop();
+}
+function draw(){
+  ctx.fillStyle='#b8c58a';ctx.fillRect(0,0,360,360);
+  ctx.fillStyle='#aab77d';
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++)if((i+j)%2===0)ctx.fillRect(i*cell,j*cell,cell,cell);
+  ctx.fillStyle='#26351f';
+  ctx.fillRect(food.x*cell+6,food.y*cell+6,cell-12,cell-12);
+  snake.forEach((s,i)=>{
+    ctx.fillStyle=i===0?'#182317':'#33442b';
+    ctx.fillRect(s.x*cell+2,s.y*cell+2,cell-4,cell-4);
+    if(i===0){
+      ctx.fillStyle='#b8c58a';
+      const ex=s.x*cell+(dir.x===1?cell-8:dir.x===-1?4:8);
+      const ey=s.y*cell+(dir.y===1?cell-8:dir.y===-1?4:8);
+      if(dir.x!==0){ctx.fillRect(ex, s.y*cell+7,3,3);ctx.fillRect(ex,s.y*cell+cell-10,3,3)}
+      else{ctx.fillRect(s.x*cell+7,ey,3,3);ctx.fillRect(s.x*cell+cell-10,ey,3,3)}
+    }
+  });
+}
+function gameOver(){
+  running=false;clearTimeout(timer);title.textContent='GAME OVER';message.textContent='SCORE: '+score+(score===best&&score>0?' • NEW BEST!':'');overlay.style.display='flex';
+}
+function togglePause(){
+  if(!running)return;
+  paused=!paused;pause.textContent=paused?'RESUME':'PAUSE';draw();loop();
+}
+document.querySelectorAll('[data-dir]').forEach(b=>b.addEventListener('pointerdown',()=>setDir(b.dataset.dir)));
+document.addEventListener('keydown',e=>{
+  const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',w:'up',s:'down',a:'left',d:'right'};
+  if(map[e.key]){e.preventDefault();setDir(map[e.key])}
+  if(e.code==='Space'){e.preventDefault();togglePause()}
+});
+pause.onclick=togglePause;restart.onclick=reset;again.onclick=reset;
+reset();
+</script>
+</body>
+</html>
